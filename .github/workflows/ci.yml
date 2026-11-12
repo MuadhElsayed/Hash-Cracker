@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run self-tests
+        run: |
+          python tests/run_tests.py
+      - name: Smoke test CLI (identify + history)
+        run: |
+          python -m hashcrypt --version
+          H=$(python -c "import hashlib; print(hashlib.md5(b'dragon').hexdigest())")
+          python -m hashcrypt --no-color identify "$H"
+          python -m hashcrypt --no-color crack "$H" -w wordlists/common_passwords.txt -t 4
+          python -m hashcrypt --no-color history --limit 1

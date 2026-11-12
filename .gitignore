@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+
+# Runtime artifacts
+data/audit_log.db
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+wordlists/rockyou.txt

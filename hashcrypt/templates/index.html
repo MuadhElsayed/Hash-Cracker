@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HashCrypt — Credential Auditing Console</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+<style>
+  :root {
+    --bg: #0f0708; --panel: #170d0f; --panel2: #120a0c; --line: #2b1418;
+    --accent: #ff4d4d; --accent2: #ff7a45; --ok: #34d399; --bad: #f87171;
+    --warn: #fbbf24; --muted: #a8958f; --txt: #eee2dd; --mono: ui-monospace,
+      "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  ::selection { background: rgba(255,77,77,.3); }
+  html, body { margin:0; height:100%; }
+  body {
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(255,77,77,.10), transparent),
+      radial-gradient(900px 400px at -10% 110%, rgba(255,122,69,.08), transparent),
+      var(--bg);
+    color: var(--txt);
+    font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .mono { font-family: var(--mono); }
+
+  /* ---------- top bar ---------- */
+  nav {
+    display:flex; align-items:center; gap:14px;
+    padding:14px 26px; border-bottom:1px solid var(--line);
+    background:rgba(18,10,12,.88); backdrop-filter: blur(8px);
+    position:sticky; top:0; z-index:10;
+  }
+  .logo { display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.04em; }
+  .logo .glyph {
+    width:30px; height:30px; border-radius:7px; display:grid; place-items:center;
+    background:linear-gradient(135deg,#b91c1c,#ef4444 60%,#ff7a45);
+    color:#fff; font-family:var(--mono); font-weight:800;
+    box-shadow:0 0 18px rgba(255,77,77,.55);
+  }
+  .logo code { color:var(--accent); font-family:var(--mono); font-size:16px; }
+  .pill {
+    font-family:var(--mono); font-size:11px; padding:3px 9px; border-radius:20px;
+    border:1px solid var(--line); color:var(--muted); background:var(--panel2);
+  }
+  .pill.danger { color:var(--accent); border-color:rgba(255,77,77,.45);
+                 background:rgba(255,77,77,.08); font-weight:700; }
+  .pill.ok    { color:var(--ok); border-color:rgba(52,211,153,.35); }
+  .pill.warn  { color:var(--warn); border-color:rgba(251,191,36,.35); }
+  .pill.live  { color:#fff; border-color:rgba(255,77,77,.6);
+                background:rgba(255,77,77,.15);
+                animation:pulse 1.4s infinite; }
+  @keyframes pulse { 50% { opacity:.45; } }
+  nav .spacer { flex:1; }
+  nav .author { color:var(--muted); font-size:12px; }
+
+  main {
+    max-width:1180px; margin:26px auto 60px; padding:0 20px;
+    display:grid; grid-template-columns: 400px 1fr; gap:20px;
+  }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
+
+  .card {
+    background:linear-gradient(180deg, rgba(255,255,255,.015), transparent 30%), var(--panel);
+    border:1px solid var(--line); border-radius:14px; padding:20px 22px;
+  }
+  .card h2 {
+    margin:0 0 14px; font-size:11.5px; font-weight:700; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--accent); display:flex; align-items:center; gap:8px;
+  }
+  .card h2::before { content:""; width:8px; height:8px; border-radius:2px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); }
+
+  label { display:block; font-size:12px; color:var(--muted); margin:12px 0 5px; }
+  input[type=text], input[type=number] {
+    width:100%; padding:9px 12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--txt); font-family:var(--mono); font-size:13px;
+    transition: border .15s, box-shadow .15s;
+  }
+  input:focus { outline:none; border-color:var(--accent);
+                box-shadow:0 0 0 3px rgba(255,77,77,.15); }
+  input[type=range] { width:100%; accent-color: var(--accent); }  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+
+  .row { display:flex; gap:10px; margin-top:16px; }
+  button {
+    padding:10px 18px; border:0; border-radius:8px; cursor:pointer;
+    font-weight:700; font-size:13.5px; letter-spacing:.02em;
+    transition: transform .08s, filter .15s, opacity .15s;
+  }
+  button:hover { filter:brightness(1.12); } button:active { transform:translateY(1px); }
+  button:disabled { opacity:.35; cursor:not-allowed; filter:none; }
+  .btn-primary { flex:1; background:linear-gradient(135deg,#dc2626,#ff4d4d 55%,#ff7a45);
+                 color:#fff; box-shadow:0 4px 18px rgba(255,77,77,.35); }
+  .btn-stop { background:#1c0f12; color:var(--bad); border:1px solid rgba(248,113,113,.4); }
+
+  /* ---------- identification preview ---------- */
+  .idbox {
+    margin-top:12px; font-family:var(--mono); font-size:12px; color:var(--muted);
+    border:1px dashed var(--line); border-radius:9px; padding:10px 12px;
+    display:none;
+  }
+  .idbox .best { color:var(--accent); font-weight:700; margin-right:8px; }
+  .idbox .cands { margin-top:5px; }
+
+  /* ---------- progress ---------- */
+  .pct-row { display:flex; align-items:baseline; gap:12px; margin-top:4px; }
+  .pct { font-family:var(--mono); font-size:34px; font-weight:800; color:var(--accent); }
+  .pct small { font-size:13px; color:var(--muted); font-weight:400; margin-right:-35px; }
+  .state-chip { margin-left:auto; font-family:var(--mono); font-size:12px;
+    padding:4px 12px; border-radius:20px; border:1px solid var(--line); color:var(--muted); }
+  .progress-shell {
+    background:var(--panel2); border-radius:8px; height:16px; margin:10px 0 4px;
+    overflow:hidden; position:relative; border:1px solid var(--line);
+  }
+  .progress-bar {
+    height:100%; width:0%; border-radius:8px; transition:width .25s;
+    background:linear-gradient(90deg,#b91c1c,#ff4d4d,#ff7a45);
+    position:relative; overflow:hidden;
+  }
+  .progress-bar.busy::after {
+    content:""; position:absolute; inset:0;
+    background:repeating-linear-gradient(45deg, transparent 0 12px, rgba(255,255,255,.16) 12px 24px);
+    animation:slide 1s linear infinite;
+  }
+  @keyframes slide { to { transform:translateX(34px); } }
+
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px; }
+  .stat {
+    background:var(--panel2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px;
+  }
+  .stat .k { font-size:10.5px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; }
+  .stat .v { font-family:var(--mono); font-size:15px; margin-top:3px; }
+
+  .result {
+    margin-top:16px; padding:16px 18px; border-radius:10px; display:none;
+    font-family:var(--mono);
+  }
+  .result.ok  { display:block; background:rgba(52,211,153,.06);
+                border:1px solid rgba(52,211,153,.35); }
+  .result.bad { display:block; background:rgba(248,113,113,.05);
+                border:1px solid rgba(248,113,113,.3); }
+  .result .pw {
+    font-size:26px; font-weight:800; color:var(--ok);
+    word-break:break-all; display:flex; align-items:center; gap:12px;
+  }
+  .result.bad .pw { color:var(--bad); }
+  .copy {
+    border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06);
+    color:var(--txt); font-size:11px; padding:4px 10px; border-radius:6px; cursor:pointer;
+  }
+  .result .sub { color:var(--muted); font-size:12px; margin-top:6px; }
+
+  /* ---------- history ---------- */
+  table { width:100%; border-collapse:collapse; font-size:12px; font-family:var(--mono); }
+  th { text-align:left; color:var(--muted); font-weight:600; font-size:10.5px;
+       text-transform:uppercase; letter-spacing:.08em; }
+  th, td { padding:7px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  tbody tr:hover { background:rgba(255,77,77,.05); }
+  .badge {
+    font-size:10px; font-weight:700; padding:2px 9px; border-radius:12px;
+    letter-spacing:.05em;
+  }
+  .badge.cracked { color:var(--ok); background:rgba(52,211,153,.12);
+                   border:1px solid rgba(52,211,153,.35); }
+  .badge.failed  { color:var(--bad); background:rgba(248,113,113,.1);
+                   border:1px solid rgba(248,113,113,.3); }
+  td .algo { color:var(--accent2); }
+  .empty { color:var(--muted); padding:14px 4px; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position:fixed; right:22px; bottom:22px; display:none;
+    background:#1c0f14; color:var(--bad); border:1px solid rgba(248,113,113,.4);
+    padding:10px 16px; border-radius:10px; font-size:13px; z-index:50;
+    box-shadow:0 8px 30px rgba(0,0,0,.5);
+  }
+  footer {
+    text-align:center; color:var(--muted); font-size:12px; padding:10px 0 40px;
+  }
+  footer .warn { color:var(--warn); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">
+    <div class="glyph">H█</div>
+    <code>HashCrypt</code>
+  </div>
+  <span class="pill">v{{ version }}</span>
+  <span class="pill live" id="jobstate" style="display:none">RUNNING</span>
+  <div class="spacer"></div>
+  <span class="author" style="color:var(--accent); font-weight:700">
+    ☠ DANGER MODE — offensive credential ops ☠
+  </span>
+</nav>
+
+<main>
+  <!-- ================= left column ================= -->
+  <section>
+    <div class="card">
+      <h2>Target Configuration</h2>
+      <form id="crackform" onsubmit="return submitHash(event)">
+        <label for="hash">Target hash</label>
+        <input id="hash" type="text" spellcheck="false"
+               placeholder="e9e10c46a1cb3a56… (MD5 / SHA1 / SHA2 / NTLM / …)" required
+               autocomplete="off">
+        <div class="idbox" id="idbox"></div>
+
+        <label for="wordlist">Wordlist path — blank = bundled demo list</label>
+        <input id="wordlist" type="text" spellcheck="false"
+               placeholder="/usr/share/wordlists/rockyou.txt" autocomplete="off">
+
+        <label for="algo">Algorithm — blank = auto-detect</label>
+        <input id="algo" type="text" spellcheck="false" list="algos"
+               placeholder="auto" autocomplete="off">
+        <datalist id="algos">
+          <option>md5</option><option>ntlm</option><option>sha1</option>
+          <option>sha224</option><option>sha256</option><option>sha384</option>
+          <option>sha512</option><option>sha3_224</option><option>sha3_256</option>
+          <option>sha3_384</option><option>sha3_512</option>
+          <option>blake2b</option><option>blake2s</option>
+        </datalist>
+
+        <label for="threads">Worker threads — <span id="tval">4</span></label>
+        <input id="threads" type="range" min="1" max="32" value="4"
+               oninput="document.getElementById('tval').textContent=this.value">
+
+        <label style="margin-top:18px; color:var(--accent); font-weight:600">
+          ▷ Brute force (optional fallback)
+        </label>
+        <div class="grid3">
+          <div>
+            <label for="charset">Charset</label>
+            <input id="charset" type="text" spellcheck="false" placeholder="0123…" autocomplete="off">
+          </div>
+          <div>
+            <label for="minlen">Min length</label>
+            <input id="minlen" type="number" min="1" max="12" value="1">
+          </div>
+          <div>
+            <label for="maxlen">Max length</label>
+            <input id="maxlen" type="number" min="1" max="10" value="6">
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn-primary" id="go" type="submit">⚡ Identify &amp; Crack</button>
+          <button class="btn-stop" id="stopbtn" type="button" disabled
+                  onclick="requestStop()">■ Stop</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= right column ================= -->
+  <section style="display:grid; gap:20px;">
+    <div class="card">
+      <h2>Live Cracking Session</h2>
+      <div class="pct-row">
+        <div class="pct"><span id="pct">0.0</span><small>%</small></div>
+        <div class="state-chip" id="st-state">idle</div>
+      </div>
+      <div class="progress-shell"><div class="progress-bar" id="bar"></div></div>
+      <div class="stats">
+        <div class="stat"><div class="k">Algorithm</div><div class="v" id="st-algo">—</div></div>
+        <div class="stat"><div class="k">Attempts</div><div class="v" id="st-count">0</div></div>
+        <div class="stat"><div class="k">Keyspace</div><div class="v" id="st-total">—</div></div>
+        <div class="stat"><div class="k">Rate</div><div class="v" id="st-rate">0 h/s</div></div>
+        <div class="stat"><div class="k">Engine</div><div class="v" id="st-engine">—</div></div>
+        <div class="stat"><div class="k">Method</div><div class="v" id="st-method">—</div></div>
+      </div>
+      <div class="result" id="result"></div>
+    </div>
+
+    <div class="card">
+      <h2>Audit History — last 25 sessions</h2>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th>#</th><th>Time (UTC)</th><th>Algo</th><th>Target</th>
+            <th>Status</th><th>Plaintext</th><th>Attempts</th><th>Time</th><th>Rate</th>
+          </tr></thead>
+          <tbody id="histrows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="histempty">no sessions yet — crack something 🙂</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  HashCrypt v{{ version }} — MIT · <span class="warn">⚠ DANGER MODE</span> — destructive
+  capability; operator assumes full responsibility.
+</footer>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => (n===undefined||n===null) ? "—" : Number(n).toLocaleString();
+const fmtRate = n => !n ? "0 h/s" : (n>=1e6 ? (n/1e6).toFixed(1)+"M" :
+                     n>=1e3 ? (n/1e3).toFixed(1)+"k" : Math.round(n)) + " h/s";
+
+/* ---------------- live identification preview ---------------- */
+let idTimer = null;
+$("hash").addEventListener("input", () => {
+  clearTimeout(idTimer);
+  const h = $("hash").value.trim();
+  if (h.length < 6) { $("idbox").style.display = "none"; return; }
+  idTimer = setTimeout(() => {
+    fetch("/identify", {method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:new URLSearchParams({hash:h})})
+      .then(r => r.json()).then(j => {
+        if (j.error) return;
+        const box = $("idbox");
+        box.style.display = "block";
+        box.innerHTML = `<span class="best">${j.best || "unknown"}</span>` +
+          ` length: ${j.length} · ${j.charset}<div class="cands">` +
+          j.candidates.slice(0,4).map(c =>
+            `${c.name} <span style="opacity:.6">${Math.round(c.confidence*100)}%</span>`
+          ).join(" · ") + "</div>";
+      }).catch(() => {});
+  }, 350);
+});
+
+/* ---------------- submit ---------------- */
+function submitHash(ev) {
+  ev.preventDefault();
+  jobDone = false;
+  const body = new URLSearchParams({
+    hash: $("hash").value.trim(),        wordlist: $("wordlist").value.trim(),
+    algo: $("algo").value.trim(),        threads: $("threads").value,
+    charset: $("charset").value.trim(),  minlen: $("minlen").value,
+    maxlen: $("maxlen").value,
+  });
+  $("go").disabled = true; $("stopbtn").disabled = false;
+  $("result").className = "result";
+  $("histempty").textContent = "";
+  fetch("/crack", {method:"POST",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"}, body})
+    .then(r => r.json()).then(j => {
+      if (j.error) { toast(j.error); resetUI(); }
+      else pollStatus();
+    }).catch(() => toast("dashboard unreachable"));
+  return false;
+}
+
+function requestStop() {
+  fetch("/stop", {method:"POST"}).then(() =>
+    $("st-state").textContent = "stopping…");
+}
+
+/* ---------------- polling ---------------- */
+let pollTimer = null;
+let jobDone = false;                     // guards duplicate terminal renders
+function pollStatus() {
+  if (!pollTimer) pollTimer = setInterval(refreshStatus, 450);
+  refreshStatus();
+}
+function refreshStatus() {
+  fetch("/status").then(r => r.json()).then(j => {
+    $("pct").textContent = (j.percent || 0).toFixed(1);
+    $("bar").style.width = (j.percent || 0) + "%";
+    $("bar").className = "progress-bar" +
+      ((j.state === "running" || j.state === "starting") ? " busy" : "");
+    $("st-state").textContent = j.state;
+    $("st-algo").textContent = j.algorithm || "—";
+    const terminal = ["done", "aborted", "error"].includes(j.state);
+    $("st-count").textContent = fmt(terminal ? (j.attempts ?? j.progress) : j.progress);
+    $("st-total").textContent = fmt(j.total) || "—";
+    $("st-rate").textContent = j.rate ? fmtRate(j.rate) : "0 h/s";
+    $("st-engine").textContent = j.engine || "—";
+    $("st-method").textContent = j.method || "—";
+    $("jobstate").style.display =
+      (j.state === "running" || j.state === "starting") ? "" : "none";
+    if (j.state === "running") $("jobstate").textContent = "RUNNING";
+
+    if (jobDone) return;
+    if (j.state === "running" || j.state === "starting" || j.state === "stopping") return;
+    jobDone = true;
+    clearInterval(pollTimer); pollTimer = null;
+    $("go").disabled = false; $("stopbtn").disabled = true;
+    $("bar").className = "progress-bar";
+    const box = $("result");
+    if (j.state === "aborted") {
+      box.className = "result bad";
+      box.innerHTML = `<div class="pw">⏹ aborted</div>
+        <div class="sub">${fmt(j.attempts)} attempts scanned before stop.</div>`;
+    } else if (j.found) {
+      box.className = "result ok";
+      const pw = document.createElement("div"); pw.className = "pw";
+      pw.innerHTML = `<span class="pwtext"></span>`;
+      pw.querySelector(".pwtext").textContent = "🔓 " + j.plaintext;
+      const cp = document.createElement("button");
+      cp.className = "copy"; cp.textContent = "COPY";
+      cp.onclick = () => copyText(j.plaintext);
+      pw.appendChild(cp);
+      const sub = document.createElement("div"); sub.className = "sub";
+      sub.textContent = `algorithm: ${j.algorithm} · attempts: ` +
+        `${fmt(j.attempts)} · time: ${(j.elapsed||0).toFixed(2)}s · ` +
+        `engine: ${j.engine||"—"} × ${j.workers||"—"}`;
+      box.appendChild(pw); box.appendChild(sub);
+    } else if (j.state === "error") {
+      box.className = "result bad";
+      box.innerHTML = `<div class="pw">⚠ error</div>
+        <div class="sub">${(j.error||"unknown").replace(/[<>&]/g,"")}</div>`;
+    } else {
+      box.className = "result bad";
+      box.innerHTML = `<div class="pw">✗ not recovered</div>
+        <div class="sub">${fmt(j.attempts)} attempts · try a larger wordlist,
+        a --salt, or the brute-force charset.</div>`;
+    }
+    loadHistory();
+  }).catch(() => {});
+}
+
+/* ---------------- history ---------------- */
+function loadHistory() {
+  fetch("/history").then(r => r.json()).then(j => {
+    const tb = $("histrows");
+    tb.innerHTML = "";
+    $("histempty").style.display = j.history.length ? "none" : "block";
+    j.history.forEach(r => {
+      const tr = document.createElement("tr");
+      const badge = r.found ? `<span class="badge cracked">CRACKED</span>`
+                            : `<span class="badge failed">FAILED</span>`;
+      tr.innerHTML =
+        `<td>${r.id}</td><td>${r.ts_utc}</td>` +
+        `<td><span class="algo">${r.hash_algo}</span></td>` +
+        `<td class="mono">${r.target_hash.slice(0,12)}…</td><td>${badge}</td>` +
+        `<td class="mono">${r.found ? escapeHtml(r.plaintext) : "—"}</td>` +
+        `<td>${fmt(r.attempts)}</td><td>${(r.elapsed_sec||0).toFixed(2)}s</td>` +
+        `<td>${fmtRate(r.rate_hps)}</td>`;
+      tb.appendChild(tr);
+    });
+  }).catch(() => {});
+}
+function escapeHtml(s) {
+  return (s||"").replace(/[&<>"']/g, m =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+/* ---------------- helpers ---------------- */
+function copyText(t) {
+  (navigator.clipboard?.writeText(t) ?? Promise.reject()).
+    catch(() => {
+      const ta = document.createElement("textarea");
+      ta.value = t; document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); ta.remove();
+    });
+  toast("plaintext copied ✔", true);
+}
+function toast(msg, okStyle) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.style.display = "block";
+  if (okStyle) { t.style.color = "var(--ok)"; t.style.borderColor =
+                 "rgba(52,211,153,.4)"; t.style.background = "#0f2018"; }
+  else { t.style.color = "var(--bad)"; t.style.borderColor =
+         "rgba(248,113,113,.4)"; t.style.background = "#1c0f14"; }
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.style.display = "none", 3200);
+}
+function resetUI() {
+  $("go").disabled = false; $("stopbtn").disabled = true;
+  $("bar").className = "progress-bar";
+}
+loadHistory();
+pollStatus();
+</script>
+</body>
+</html>

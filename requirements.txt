@@ -1,0 +1,3 @@
+# Optional — only needed for the `hashcrypt web` dashboard.
+# The CLI itself has zero third-party dependencies.
+flask>=2.3
