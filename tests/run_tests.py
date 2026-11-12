@@ -61,21 +61,21 @@ def t_engines():
         res = cracker.crack_dictionary(target, algo, words, workers=4)
         check(f"{algo} dictionary", res["found"] and res["plaintext"] == word)
 
-    # brute force, threaded
+    # Brute force, threaded
     target = cracker.compute_digest("xyz", "sha256")
     res = cracker.crack_bruteforce(
         target, "sha256", "abcxyz", 3, 3, workers=4
     )
     check("sha256 brute (threading)", res["found"] and res["plaintext"] == "xyz")
 
-    # brute force, multiprocessing
+    # Brute force, multiprocessing
     target = cracker.compute_digest("cat", "md5")
     res = cracker.crack_bruteforce(
         target, "md5", "act", 3, 3, workers=2, use_processes=True
     )
     check("md5 brute (multiprocessing)", res["found"] and res["plaintext"] == "cat")
 
-    # dictionary via multiprocessing
+    # Dictionary via multiprocessing
     target = cracker.compute_digest("welcome", "ntlm")
     res = cracker.crack_dictionary(
         target, "ntlm", ["welcome", "xx"], workers=2,
@@ -83,7 +83,7 @@ def t_engines():
     )
     check("ntlm dict (multiprocessing)", res["found"] and res["plaintext"] == "welcome")
 
-    # salts
+    # Salts
     target = hashlib.md5(b"2024dragon").hexdigest()
     res = cracker.crack_dictionary(
         target, "md5", ["dragon"], salt="2024", position="prepend"
@@ -96,13 +96,13 @@ def t_engines():
     )
     check("salt append", res["found"])
 
-    # no-match reports failure but correct attempt count
+    # No-match reports failure but correct attempt count
     res = cracker.crack_dictionary(
         cracker.compute_digest("nope", "md5"), "md5", ["a", "b", "c"]
     )
     check("no-match counted", not res["found"] and res["attempts"] == 3)
 
-    # unified crack() with auto-identification + fallback chain
+    # Unified crack() with auto-identification + fallback chain
     res = cracker.universal_crack(
         cracker.compute_digest("hello123", "ntlm"),
         ["wrong", "hello123"]
