@@ -1,244 +1,351 @@
-# ☠ HashCrypt — Danger Console
+# HashCrypt
 
-**Hash identification & credential-cracking console** — a Python-based offensive
-security tool that identifies hash algorithms automatically, runs multi-threaded /
-multi-process dictionary and brute-force attacks, tracks live progress in a CLI or
-web dashboard, and logs every session to a local SQLite audit database.
+**Hash identification and password-auditing toolkit** built with Python. HashCrypt analyzes hash strings, runs dictionary and brute-force candidate searches, provides a command-line interface and an optional Flask dashboard, and stores local audit records in SQLite.
 
-> ⚠️ **DANGER MODE** — dual-use tooling. The operator assumes full responsibility
-> for its use and for compliance with applicable laws.
+> **Authorized-use notice:** HashCrypt is intended for coursework, controlled labs, and security assessments that you own or are explicitly authorized to perform. Do not use it to access accounts, systems, or data without permission. You are responsible for complying with applicable laws and rules.
 
----
+<p align="center">
+  <img src="docs/dashboard.png" alt="HashCrypt web dashboard" width="900">
+</p>
 
-## Screenshots
+## Table of Contents
 
-**Web dashboard** (`hashcrypt web`) — target config, live session cards, copy button,
-audit history with CRACKED/FAILED badges:
+- [Overview](#overview)
+- [Features](#features)
+- [Supported Algorithms and Formats](#supported-algorithms-and-formats)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [CLI Reference](#cli-reference)
+- [Web Dashboard](#web-dashboard)
+- [Audit Database](#audit-database)
+- [Project Structure](#project-structure)
+- [Tests and Continuous Integration](#tests-and-continuous-integration)
+- [Current Limitations](#current-limitations)
+- [Security and Privacy](#security-and-privacy)
+- [License](#license)
 
-![HashCrypt web dashboard](docs/dashboard.png)
+## Overview
 
-**CLI console** — the DANGER banner printed on every launch (rendered bright
-red in a real terminal):
+HashCrypt is an educational credential-auditing utility organized into four main phases:
 
-```text
-·····▒▒ f3859734 927b2270 7660708b 3e3edeff 90f62d1c 9b033f1e b15df634 ▒▒·····
+1. **Hash identification:** inspects the input length, character set, and recognizable format markers, then returns ranked algorithm candidates.
+2. **Candidate search:** compares a target hash against words from a wordlist or candidates generated from a character set.
+3. **User interfaces:** exposes the functionality through a terminal CLI and an optional local web dashboard.
+4. **Audit logging:** records completed sessions and summary statistics in a local SQLite database.
 
-  ██      ██   ██████     ████████ ██      ██
-  ██      ██ ██      ██ ██         ██      ██
-  ██      ██ ██      ██ ██         ██      ██
-  ██████████ ██████████   ██████   ██████████
-  ██      ██ ██      ██         ██ ██      ██
-  ██      ██ ██      ██         ██ ██      ██
-  ██      ██ ██      ██ ████████   ██      ██
-    ██████   ████████   ██      ██ ████████   ██████████
-  ██      ██ ██      ██ ██      ██ ██      ██     ██    
-  ██         ██      ██   ██  ██   ██      ██     ██    
-  ██         ████████       ██     ████████       ██    
-  ██         ██  ██         ██     ██             ██    
-  ██      ██ ██    ██       ██     ██             ██    
-    ██████   ██      ██     ██     ██             ██    
-
-───────────────────☠ ─────  D A N G E R   Z O N E  ───── ☠────────────────────
-
-           [ identify ]  [ crack ]  [ history ]  [ stats ]  [ web ]           
-
-▐ engine   hashlib · threads · processes · abort-safe                       ▐
-▐ wordlist wordlists/ · /usr/share/wordlists/*                              ▐
-▐ session  0x144924FE · pid 129664 · 2 cores                                ▐
-
-───────────☠ DANGER MODE ACTIVE · v2.1.0 · destructive capability ☠───────────
-·····▒▒ 9f21867c 7ea62e5c ab5586fe 3236caed 49c3d948 c3756593 d45903c5 ▒▒·····
-```
-
----
+HashCrypt does not decrypt hashes. It hashes candidate values and compares the resulting digest with the supplied target.
 
 ## Features
 
-| Phase | Module | What it does |
-|---|---|---|
-| 1 — Identification | `hashcrypt/identifier.py` | Length + charset + **structural markers** (`$6$…`, bcrypt, `$NT$…`, `$apr1$`, Argon2, PBKDF2) → ranked candidate list with confidence bars |
-| 2 — Cracking core | `hashcrypt/cracker.py` | Dictionary & **radix-partitioned brute-force** engines, threading and multiprocessing, salting, cooperative abort (Ctrl+C / web stop button), live h/s + ETA |
-| 3 — Interfaces | `hashcrypt/cli.py`, `hashcrypt/webapp.py` | argparse CLI with live animated progress; Flask dashboard with identification preview, stop button, and history console |
-| 4 — Audit trail | `hashcrypt/storage.py` | Every session (success **or** failure) persisted to SQLite: plaintext, attempts, timings, engine, workers, wordlist, salt, notes — plus aggregate `stats` |
+- Hash analysis using digest length, character composition, and format markers.
+- Dictionary search using a supplied wordlist.
+- Brute-force search over a user-defined character set and length range.
+- Thread-based brute-force execution and optional process-based execution.
+- Optional multiprocessing for dictionary searches with the `-p` flag.
+- Basic salt handling by prepending or appending a supplied salt to each candidate.
+- Live CLI progress, attempt counts, speed, and estimated time remaining.
+- Cooperative cancellation using `Ctrl+C` in the CLI or the Stop control in the dashboard.
+- Optional Flask dashboard for submitting jobs and viewing their status.
+- SQLite audit history for completed attempts, including successful and unsuccessful results.
+- CLI utility for generating reference hashes during testing.
 
-**Supported attack algorithms:** MD5, MD4, NTLM*(pure-python MD4 fallback)*, SHA-1,
-SHA-224/256/384/512, SHA3-224/256/384/512, BLAKE2b, BLAKE2s — salted variants supported
-as libraries, format detection identifies their structures (marked "not crackable by
-the built-in engine").
+## Supported Algorithms and Formats
 
----
+### Built-in candidate-search engine
 
-## Install (from GitHub)
+The built-in engine supports the following digest algorithms:
+
+| Family | Supported algorithms |
+|---|---|
+| MD5 | MD5 |
+| Windows credentials | NTLM |
+| SHA-1 | SHA-1 |
+| SHA-2 | SHA-224, SHA-256, SHA-384, SHA-512 |
+| SHA-3 | SHA3-224, SHA3-256, SHA3-384, SHA3-512 |
+| BLAKE2 | BLAKE2b, BLAKE2s |
+
+NTLM calculation uses MD4 over the password encoded as UTF-16LE. HashCrypt includes a pure-Python MD4 fallback because some OpenSSL builds do not expose MD4 through Python's `hashlib`.
+
+### Identification only
+
+The identifier recognizes additional formats and markers, including bcrypt, Unix `md5crypt` / `sha256crypt` / `sha512crypt`, Apache APR1, Argon2, PBKDF2, SCRAM, LM, and selected MySQL formats. **Recognition does not mean the built-in engine can crack that format.** Formats that require a dedicated password-hashing/KDF implementation are reported as identification-only.
+
+> Hash identification is heuristic. Different algorithms can produce strings with the same length and character set (for example, MD5 and NTLM are both commonly represented by 32 hexadecimal characters). Use `--algo` to select the algorithm when it is known.
+
+## Requirements
+
+- Python 3.9 or newer.
+- Git (to clone the repository).
+- Flask 2.3 or newer only if you want to use the web dashboard.
+- No third-party dependencies are required for the core CLI and candidate-search engine; they use the Python standard library.
+
+## Installation
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/MuadhElsayed/Hash-Cracker.git
+cd Hash-Cracker
+
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+
+# Core CLI
+python -m pip install -e .
+
+# Optional: install Flask for the web dashboard
+python -m pip install -e ".[web]"
+```
+
+### Linux / Kali Linux
 
 ```bash
-# 1) plain git clone — zero dependencies, Python ≥ 3.9
-git clone https://github.com/YOUR-GITHUB-USERNAME/hashcrypt.git
-cd hashcrypt
-python3 -m hashcrypt --version
+git clone https://github.com/MuadhElsayed/Hash-Cracker.git
+cd Hash-Cracker
 
-# 2) editable install with console entrypoint + dashboard extra
-#    (Kali/Debian PEP-668 note: use a venv, pipx, or --break-system-packages)
-pip install -e ".[web]"
-hashcrypt --version        # ← native shell command
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+
+# Core CLI
+python -m pip install -e .
+
+# Optional: install Flask for the web dashboard
+python -m pip install -e ".[web]"
 ```
 
-- **No dependencies** are required for the CLI (Python standard library only).
-- `pip install -e ".[web]"` adds Flask for the dashboard.
-- Works on **any machine with Python ≥ 3.9** — designed and tested on **Kali Linux**.
-
----
-
-## Quickstart
-
-### 1. Identify an unknown hash
+After installation, the `hashcrypt` command is available in the active environment. You can also run it from the repository root without installing the console command:
 
 ```bash
-hashcrypt identify 8621ffdbc5698829397d97767ac13db3
-```
-```text
-Input           : 8621ffdbc5698829397d97767ac13db3
-Length          : 32
-Character set   : lowercase hex
-Best guess      : MD5
-Candidates      :  MD5 50% |##########|  NTLM 45% |#########|  MD4 30% |######| …
-Crackable via   : `md5`
+python -m hashcrypt --help
 ```
 
-### 2. Dictionary attack (the core workflow)
+## Quick Start
 
-```bash
-hashcrypt crack 8621ffdbc5698829397d97767ac13db3 -w /usr/share/wordlists/rockyou.txt -t 8
-```
-Live progress: `[dict/MD5] ██████░░░░░ 42.0%  8.4k / 20k  54.8k h/s  ETA 00:00:21`.
-Press **Ctrl+C** any time — workers exit cooperatively and nothing is half-logged.
+### 1. Generate reference hashes
 
-### 3. Ambiguity handling (auto-detect)
-
-MD5 and NTLM are both 32 hex chars. When `-a` is not forced, HashCrypt tries **both**:
-
-```bash
-hashcrypt crack f7eb9c06fafaa23c4bcf22ba6781c1e2 -w wordlists/common_passwords.txt
-# [dict/MD5]  …  exhausted
-# [dict/NTLM] …  CRACKED → dragon
-```
-
-### 4. Brute force
-
-```bash
-hashcrypt crack 3608bca1e44…c9282 -b "abcxyz" -l 3 3 -t 6       # sha256("xyz")
-```
-The keyspace is mathematically partitioned by **radix indexing** — workers scan disjoint
-slices, no duplicated work, no RAM blow-up on huge keyspaces.
-
-### 5. Multiprocessing engine
-
-```bash
-hashcrypt crack <md5> -b "abcdefgh" -l 6 6 -p -t 4       # ~44k h/s in pure Python
-```
-
-### 6. Salted candidates
-
-```bash
-hashcrypt crack 92ed27fdbab41578a1d7d43fc1e61d8a \
-        -w wordlists/common_passwords.txt --salt=2024 --salt-pos prepend
-# PASSWORD  2024dragon   (candidate = salt + word)
-```
-
-### 7. Audit history & statistics
-
-```bash
-hashcrypt history                 # per-session rows
-hashcrypt history --found-only
-hashcrypt stats                   # aggregated policy-report view
-```
-```text
-  sessions        :         17
-  cracked         :         14  (82.4% success rate)
-  total attempts  : 14,401,456
-  cpu time spent  :       45.6s
-  best rate       :    330,661 h/s   [sha256 · threading × 8]
-  by algorithm    : md5 × 9, sha256 × 5, ntlm × 3
-```
-
-### 8. Web dashboard (optional)
-
-```bash
-hashcrypt web --port 5000        # open http://127.0.0.1:5000
-```
-- paste a hash → **instant identification preview** as you type
-- choose wordlist, algorithm, thread slider, brute-force charset/lengths
-- watch progress live; **■ Stop** button aborts cooperatively
-- recovered plaintext with one-click **COPY**
-- audit-history table with CRACKED/FAILED badges + rate column
-
-### 9. Generate reference hashes (for testing)
+Use this command to generate hashes for controlled tests:
 
 ```bash
 hashcrypt gen dragon --algorithms md5 ntlm sha256
 ```
 
----
-
-## CLI reference
-
-| Command | Purpose |
-|---|---|
-| `hashcrypt identify <hash>` | identify algorithm (length/charset/structure analysis) |
-| `hashcrypt crack <hash>` | run dictionary / brute-force session |
-| `hashcrypt history` | review saved audit records |
-| `hashcrypt stats` | aggregate statistics (policy-review view) |
-| `hashcrypt gen <word>` | generate hashes of a word for testing |
-| `hashcrypt web` | launch Flask dashboard on `http://127.0.0.1:5000` |
-
-Key `crack` options: `-w` wordlist · `-a` algorithm · `-b` charset · `-l MIN MAX`
-lengths · `-t` workers · `-p` multiprocessing · `--salt`/`--salt-pos` · `--note` /
-`--no-log` · `--db PATH` · exit codes: `0` cracked, `1` no match, `130` aborted.
-
----
-
-## Run the tests
+### 2. Identify a hash
 
 ```bash
-python3 tests/run_tests.py
-# 32 passed, 0 failed
+hashcrypt identify 8621ffdbc5698829397d97767ac13db3
 ```
-Covers identification, both engines (threaded & multiprocess), salting, the MD4
-fallback (RFC 1320 vectors incl. multi-block messages) and SQLite auditing. CI runs
-the same suite on Python 3.9 → 3.13 (`.github/workflows/ci.yml`).
 
----
+The identifier reports the input length, character set, ranked candidates, and whether a candidate can be handled by the built-in engine.
 
-## Design notes (for the report)
+### 3. Run a dictionary search
 
-- **Chunked work avoids lock contention** — contiguous word slices; workers bump the
-  shared counter only every 4096 attempts.
-- **Mathematical keyspace partitioning** — brute-force candidates map directly from a
-  linear index (`divmod`) so `[start, end)` slices are disjoint and cheap.
-- **Abort-safe by construction** — every engine checks a cooperative stop event;
-  multiprocessing workers share it through an `mp.Event` initializer.
-- **MD4 availability** — OpenSSL 3 ships without MD4; a validated in-tree
-  pure-python MD4 (RFC 1320) keeps NTLM cracking dependable.
-- **Why only ~10–50k h/s?** This is a teaching methodology tool in pure Python.
-  For production-grade audits use the same report format against `hashcat` / `john`.
+Use the small wordlist included with the repository for a quick demonstration:
 
----
-
-## Project layout
-
+```bash
+hashcrypt crack 8621ffdbc5698829397d97767ac13db3 \
+  --wordlist wordlists/common_passwords.txt \
+  --algo md5 \
+  --threads 4
 ```
-hashcrypt/
-├── identifier.py      Phase 1 — identification & structure analysis
-├── cracker.py         Phase 2 — dictionary & brute-force engines (threads/proc)
-├── cli.py             Phase 3 — console interface + pixel-art banner
-├── webapp.py          Phase 3 — optional Flask dashboard
-├── storage.py         Phase 4 — SQLite audit log & statistics
-└── templates/index.html        dashboard UI (no CDN, works offline)
-tests/run_tests.py    32 self-tests, all phases
-wordlists/            bundled demo wordlist
-data/audit_log.db     created at first run (gitignored)
-pyproject.toml        pip-installable, `hashcrypt` console command
+
+You can provide another wordlist with `-w` / `--wordlist`. Large wordlists are not included in this repository; for example, a locally installed Kali wordlist can be supplied by its local path.
+
+### 4. Run a brute-force search
+
+The following example searches strings of length 1 to 3 formed from the characters `a`, `b`, `c`, `x`, `y`, and `z`:
+
+```bash
+hashcrypt crack <TARGET_SHA256> \
+  --algo sha256 \
+  --brute abcxyz \
+  --lengths 1 3 \
+  --threads 4
 ```
+
+Replace `<TARGET_SHA256>` with a SHA-256 hash generated for a test value in the allowed candidate space. The total keyspace is:
+
+\[
+N = \sum_{k=m}^{n} |C|^k
+\]
+
+where `C` is the character set and `m` / `n` are the minimum and maximum candidate lengths.
+
+### 5. Use multiprocessing
+
+Add `-p` / `--processes` to use worker processes instead of the default execution mode:
+
+```bash
+hashcrypt crack <TARGET_HASH> \
+  --wordlist wordlists/common_passwords.txt \
+  --algo md5 \
+  --threads 4 \
+  --processes
+```
+
+### 6. Apply a simple prefix or suffix salt
+
+HashCrypt can prepend or append a supplied salt to each candidate:
+
+```bash
+hashcrypt crack <TARGET_HASH> \
+  --wordlist wordlists/common_passwords.txt \
+  --algo sha256 \
+  --salt 2024 \
+  --salt-pos prepend
+```
+
+This option models simple candidate concatenation. It is not a general implementation of salted password formats such as bcrypt, Argon2, or PBKDF2.
+
+### 7. Review audit history and statistics
+
+```bash
+hashcrypt history
+hashcrypt history --found-only --limit 10
+hashcrypt stats
+```
+
+### 8. Launch the web dashboard
+
+Install the optional web dependency first, then run:
+
+```bash
+hashcrypt web --host 127.0.0.1 --port 5000
+```
+
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
+
+## CLI Reference
+
+| Command | Description |
+|---|---|
+| `hashcrypt --help` | Show general help. |
+| `hashcrypt --version` | Print the installed version. |
+| `hashcrypt identify <HASH>` | Analyze a hash string. |
+| `hashcrypt gen <WORD>` | Generate reference hashes for a word. |
+| `hashcrypt crack <HASH>` | Run a dictionary search, brute-force search, or both. |
+| `hashcrypt history` | Display recent audit records. |
+| `hashcrypt stats` | Display aggregate audit statistics. |
+| `hashcrypt web` | Start the optional Flask dashboard. |
+
+### Common `crack` options
+
+| Option | Description |
+|---|---|
+| `-w`, `--wordlist PATH` | Path to a dictionary file. |
+| `-a`, `--algo NAME` | Force a specific supported algorithm. |
+| `-b`, `--brute CHARSET` | Enable brute-force search with the supplied characters. |
+| `-l`, `--lengths MIN MAX` | Minimum and maximum candidate lengths (default: `1 6`). |
+| `-t`, `--threads N` | Number of worker threads or processes (default: `4`). |
+| `-p`, `--processes` | Use multiprocessing. |
+| `--salt VALUE` | Prepend or append a salt to each candidate. |
+| `--salt-pos append\|prepend` | Choose where the salt is added (default: `append`). |
+| `--db PATH` | Select the SQLite audit database path. |
+| `--no-log` | Do not write the session to the audit database. |
+| `--note TEXT` | Attach a note to the audit record. |
+
+For complete options, run:
+
+```bash
+hashcrypt crack --help
+hashcrypt history --help
+hashcrypt web --help
+```
+
+## Web Dashboard
+
+The optional Flask dashboard provides:
+
+- Hash identification preview.
+- Dictionary and brute-force configuration.
+- Worker-count configuration.
+- Live status, progress, and attempt-rate display.
+- A Stop control for a running job.
+- Recovered-result display and local audit-history view.
+
+The dashboard currently handles one cracking job at a time and does not provide user authentication. Keep it bound to `127.0.0.1`; do not expose it to a public or untrusted network.
+
+## Audit Database
+
+By default, HashCrypt creates the SQLite database at:
+
+```text
+data/audit_log.db
+```
+
+The audit data includes fields such as:
+
+- Timestamp, algorithm, target hash, and search method.
+- Whether a match was found and the recovered plaintext, if any.
+- Attempts, candidate count, elapsed time, and hash rate.
+- Worker count, execution engine, and wordlist path.
+- Optional salt and user note.
+
+The database is created automatically when a session is logged. It is intentionally excluded from version control because it can contain recovered plaintext credentials and other sensitive audit data.
+
+## Project Structure
+
+```text
+Hash-Cracker/
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # GitHub Actions test workflow
+├── data/
+│   └── .gitkeep                # Keeps the runtime data directory in Git
+├── docs/
+│   └── dashboard.png           # Web dashboard screenshot
+├── hashcrypt/
+│   ├── __init__.py             # Package metadata and version
+│   ├── __main__.py             # Enables: python -m hashcrypt
+│   ├── cli.py                  # Command-line interface
+│   ├── identifier.py           # Hash structure and format identification
+│   ├── cracker.py              # Dictionary and brute-force engines
+│   ├── storage.py              # SQLite audit logging and statistics
+│   ├── webapp.py               # Optional Flask application
+│   └── templates/
+│       └── index.html          # Dashboard frontend
+├── tests/
+│   └── run_tests.py            # Self-test suite
+├── wordlists/
+│   └── common_passwords.txt   # Small demonstration wordlist
+├── .gitignore
+├── LICENSE
+├── README.md
+├── pyproject.toml              # Packaging and console entry point
+└── requirements.txt            # Optional web dependency reference
+```
+
+## Tests and Continuous Integration
+
+Run the self-test suite from the repository root:
+
+```bash
+python tests/run_tests.py
+```
+
+The tests cover hash identification, supported dictionary and brute-force paths, multiprocessing, salt handling, NTLM/MD4 fallback reference vectors, and SQLite audit storage.
+
+The GitHub Actions workflow is configured to test the supported Python matrix (3.9 through 3.13). A green workflow indicates that the automated checks completed successfully for the configured environments.
+
+## Current Limitations
+
+- Hash identification produces ranked candidates; length and character format alone cannot prove which algorithm generated a hash.
+- bcrypt, Argon2, PBKDF2, Unix crypt, and other identification-only formats cannot be searched by the built-in engine.
+- Dictionary files are loaded into memory and de-duplicated before searching. Very large wordlists may require substantial RAM.
+- In the current implementation, dictionary mode uses multiprocessing when `-p` is supplied; without `-p`, it processes its chunks sequentially. Brute-force mode uses threads by default and can use processes with `-p`.
+- The tool is implemented in Python for educational use. Its throughput depends on the algorithm, machine, and execution mode; no fixed performance figure is guaranteed.
+- GPU acceleration is not implemented.
+
+## Security and Privacy
+
+- Only test hashes you own or are authorized to assess.
+- Keep wordlists and audit databases out of public repositories unless you have verified that they contain no sensitive or restricted data.
+- The audit database can store recovered plaintext values. Protect it with appropriate filesystem permissions and delete it securely when it is no longer required.
+- The web dashboard has no authentication or authorization layer. Use it locally only.
+- Do not use HashCrypt as a password-storage system. For application password storage, use a dedicated password-hashing scheme such as Argon2id, scrypt, or bcrypt with appropriate parameters.
 
 ## License
 
-MIT — see `LICENSE`.
+This project is distributed under the MIT License. See [LICENSE](LICENSE) for the full text.
